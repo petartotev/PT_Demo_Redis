@@ -9,108 +9,78 @@ namespace DemoPetarRedis.Controllers;
 [Route("api/[controller]")]
 public class RedisController : ControllerBase
 {
+    private readonly IConnectionMultiplexer _multiplex;
+    private readonly IDatabase _database;
+
+    public RedisController(IConnectionMultiplexer multiplex)
+    {
+        _multiplex = multiplex;
+        _database = _multiplex.GetDatabase();
+    }
+
     [HttpGet]
     public IActionResult GetAll()
     {
-        var options = ConfigurationOptions.Parse("127.0.0.1:6379,allowAdmin=true");
-        using (ConnectionMultiplexer redis = ConnectionMultiplexer.Connect(options))
+        var server = _multiplex.GetServer(_multiplex.GetEndPoints().First());
+        var keys = server.Keys(pattern: "*").ToArray(); // Use with caution; consider specifying a more specific pattern
+        var results = new List<RedisModel>();
+
+        foreach (var key in keys)
         {
-            var server = redis.GetServer("127.0.0.1", 6379);
-            var db = redis.GetDatabase();
-            var keys = server.Keys(pattern: "*").ToArray(); // Use with caution; consider specifying a more specific pattern
-
-            List<RedisModel> results = new List<RedisModel>();
-
-            foreach (var key in keys)
+            var value = _database.StringGet(key); // Assuming the values are stored as strings
+            if (value.HasValue)
             {
-                var value = db.StringGet(key); // Assuming the values are stored as strings
-                if (value.HasValue)
-                {
-                    RedisModel model = JsonSerializer.Deserialize<RedisModel>(value);
-                    if (model != null)
-                    {
-                        results.Add(model);
-                    }
-                }
+                var model = JsonSerializer.Deserialize<RedisModel>(value);
+                if (model != null)
+                    results.Add(model);
             }
-
-            return Ok(results);
         }
+
+        return Ok(results);
     }
 
     [HttpGet("{id}", Name = "GetById")]
     public IActionResult GetById(string id)
     {
-        var options = ConfigurationOptions.Parse("127.0.0.1:6379,allowAdmin=true");
-        using (ConnectionMultiplexer redis = ConnectionMultiplexer.Connect(options))
-        {
-            var server = redis.GetServer("127.0.0.1", 6379);
-            var db = redis.GetDatabase();
-            var result = db.StringGet(id);
+        var result = _database.StringGet(id);
 
-            if (result == default)
-            {
-                return NotFound();
-            }
+        if (result.IsNull)
+            return NotFound();
 
-            var resultDeserialized = JsonSerializer.Deserialize<RedisModel>(result);
-
-            return Ok(resultDeserialized);
-        }
+        return Ok(JsonSerializer.Deserialize<RedisModel>(result));
     }
 
     [HttpPost]
     public IActionResult Create(RedisModel model)
     {
-        var options = ConfigurationOptions.Parse("127.0.0.1:6379,allowAdmin=true");
-        using (var redis = ConnectionMultiplexer.Connect(options))
-        {
-            var db = redis.GetDatabase();
+        var success = _database.StringSet(model.Id, JsonSerializer.Serialize(model), when: When.NotExists);
 
-            var plat = db.StringSet(model.Id, JsonSerializer.Serialize(model));
+        if (!success)
+            return StatusCode(409, "A model with the same ID already exists.");
 
-            return CreatedAtRoute(nameof(GetById), new { id = model.Id }, model);
-        }
+        return CreatedAtRoute(nameof(GetById), new { id = model.Id }, model);
     }
 
     [HttpPut("{id}")]
     public IActionResult Update(string id, [FromBody] RedisModel model)
     {
         if (model == null || id != model.Id)
-        {
-            return BadRequest();
-        }
+            return BadRequest("Model is null or ID mismatch.");
 
-        var options = ConfigurationOptions.Parse("127.0.0.1:6379,allowAdmin=true");
-        using (var redis = ConnectionMultiplexer.Connect(options))
-        {
-            var db = redis.GetDatabase();
-            //var key = $"model:{id}";
-            var exists = db.KeyExists(id);
-            if (!exists)
-            {
-                return NotFound();
-            }
+        if (!_database.KeyExists(id))
+            return NotFound();
 
-            var value = JsonSerializer.Serialize(model);
-            db.StringSet(id, value);
+        _database.StringSet(id, JsonSerializer.Serialize(model));
 
-            return Ok(model);
-        }
+        return Ok(model);
     }
 
     [HttpDelete("{id}")]
     public IActionResult Delete(string id)
     {
-        var options = ConfigurationOptions.Parse("127.0.0.1:6379,allowAdmin=true");
-        using (var redis = ConnectionMultiplexer.Connect(options))
-        {
-            var db = redis.GetDatabase();
-            var deleted = db.KeyDelete(id);
+        if (!_database.KeyDelete(id))
+            return NotFound();
 
-            if (!deleted) return NotFound();
-
-            return Ok();
-        }
+        return Ok();
     }
 }
