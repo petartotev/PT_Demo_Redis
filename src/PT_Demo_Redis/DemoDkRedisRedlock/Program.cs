@@ -1,4 +1,3 @@
-
 using DemoDkRedisRedlock.Configuration;
 
 namespace DemoDkRedisRedlock
@@ -30,7 +29,6 @@ namespace DemoDkRedisRedlock
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
-
 
             app.MapControllers();
 
