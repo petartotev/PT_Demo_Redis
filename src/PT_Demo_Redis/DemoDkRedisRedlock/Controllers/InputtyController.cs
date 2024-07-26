@@ -38,10 +38,11 @@ namespace DemoDkRedisRedlock.Controllers
 
             var hash = CalculateSha256Hash(request.Word);
 
-            var lockExpiry = TimeSpan.FromMinutes(_configuration.GetValue<int>("RedisTimeToLiveMinutes"));
-            var lockKey = $"lock:{request.Word}";
-
-            await using (var redLock = await _redLockFactory.CreateLockAsync(lockKey, lockExpiry))
+            await using (var redLock = await _redLockFactory.CreateLockAsync(
+                $"lock:{request.Word}",
+                _configuration.GetValue<TimeSpan>("RedisRedlockExpiryTime"),
+                _configuration.GetValue<TimeSpan>("RedisRedlockWaitTime"),
+                _configuration.GetValue<TimeSpan>("RedisRedlockRetryTime")))
             {
                 if (redLock.IsAcquired)
                 {
