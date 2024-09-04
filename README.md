@@ -37,7 +37,7 @@ docker compose up -d
 
 ### Redis CLI
 
-1. Download latest Redis.zip from https://github.com/microsoftarchive/redis/releases and extract the contents of the zip.
+1. Download latest `Redis-x64.zip` from https://github.com/microsoftarchive/redis/releases and extract it.
 
 2. Next, in the extracted directory, open a new CMD prompt.
 
